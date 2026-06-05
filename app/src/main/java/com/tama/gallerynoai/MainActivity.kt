@@ -1,7 +1,6 @@
 package com.tama.gallerynoai
 
 import android.Manifest
-import android.app.Activity
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
@@ -9,15 +8,9 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
-import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.graphics.Color
-import kotlinx.coroutines.delay
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Collections
 import androidx.compose.material.icons.filled.Photo
@@ -26,35 +19,23 @@ import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavGraph.Companion.findStartDestination
-import androidx.navigation.compose.NavHost
-import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
-import android.net.Uri
-import androidx.core.net.toUri
-import androidx.navigation.NavType
-import androidx.navigation.navArgument
-import com.tama.gallerynoai.data.model.MediaItem
 import com.tama.gallerynoai.data.repository.MediaRepository
 import com.tama.gallerynoai.data.settings.SettingsManager
 import com.tama.gallerynoai.ui.navigation.NavRoutes
-import com.tama.gallerynoai.ui.screens.*
 import com.tama.gallerynoai.ui.theme.GalleryTheme
 import com.tama.gallerynoai.ui.viewmodel.GalleryViewModel
 import com.tama.gallerynoai.ui.viewmodel.GalleryViewModelFactory
 import com.tama.gallerynoai.ui.viewmodel.SettingsViewModel
-import java.net.URLDecoder
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
 
@@ -104,9 +85,12 @@ class MainActivity : ComponentActivity() {
         setContent {
             val themeMode by settingsViewModel.themeMode.collectAsStateWithLifecycle()
             val fontFamily by settingsViewModel.fontFamily.collectAsStateWithLifecycle()
+            val amoledMode by settingsViewModel.amoledMode.collectAsStateWithLifecycle()
+            val themeColor by settingsViewModel.themeColor.collectAsStateWithLifecycle()
             val accentColorInt by settingsViewModel.accentColor.collectAsStateWithLifecycle()
             val secondaryColorInt by settingsViewModel.secondaryColor.collectAsStateWithLifecycle()
             val tertiaryColorInt by settingsViewModel.tertiaryColor.collectAsStateWithLifecycle()
+            val showNavLabel by settingsViewModel.showNavLabel.collectAsStateWithLifecycle()
             
             val darkTheme = when (themeMode) {
                 "Light" -> false
@@ -116,11 +100,12 @@ class MainActivity : ComponentActivity() {
 
             GalleryTheme(
                 darkTheme = darkTheme,
-                dynamicColor = true,
+                themeColor = themeColor,
                 fontFamilyName = fontFamily,
-                accentColor = Color(accentColorInt),
-                secondaryColor = Color(secondaryColorInt),
-                tertiaryColor = Color(tertiaryColorInt)
+                amoledMode = amoledMode,
+                accentColor = if (accentColorInt == 0xFF6650a4.toInt()) null else Color(accentColorInt),
+                secondaryColor = if (secondaryColorInt == 0xFF625b71.toInt()) null else Color(secondaryColorInt),
+                tertiaryColor = if (tertiaryColorInt == 0xFF7D5260.toInt()) null else Color(tertiaryColorInt)
             ) {
                 val navController = rememberNavController()
                 
@@ -149,6 +134,7 @@ class MainActivity : ComponentActivity() {
                                 navController = navController, 
                                 currentDestination = currentDestination,
                                 galleryViewModel = galleryViewModel,
+                                showLabel = showNavLabel,
                                 onTabReselected = { screen ->
                                     if (navController.currentDestination?.route != screen.route) {
                                         // Clear selection and search when popping back to root
@@ -178,7 +164,7 @@ class MainActivity : ComponentActivity() {
                         settingsViewModel = settingsViewModel,
                         commonLauncher = commonLauncher,
                         restoreLauncher = restoreLauncher,
-                        modifier = androidx.compose.ui.Modifier.padding(innerPadding),
+                        modifier = Modifier.padding(innerPadding),
                         activity = this
                     )
                 }
@@ -198,8 +184,8 @@ class MainActivity : ComponentActivity() {
             val uri = intent.data ?: return
             val mimeType = intent.type ?: contentResolver.getType(uri) ?: "image/*"
             val encodedUri = URLEncoder.encode(uri.toString(), StandardCharsets.UTF_8.toString())
-            navController.navigate(com.tama.gallerynoai.ui.navigation.NavRoutes.externalDetail(encodedUri, mimeType)) {
-                popUpTo(com.tama.gallerynoai.ui.navigation.NavRoutes.PHOTOS) { inclusive = false }
+            navController.navigate(NavRoutes.externalDetail(encodedUri, mimeType)) {
+                popUpTo(NavRoutes.PHOTOS) { inclusive = false }
             }
         }
     }
@@ -251,6 +237,7 @@ fun BottomNavigationBar(
     navController: androidx.navigation.NavHostController, 
     currentDestination: androidx.navigation.NavDestination?,
     galleryViewModel: GalleryViewModel,
+    showLabel: Boolean = true,
     onTabReselected: (Screen) -> Unit
 ) {
     val items = listOf(Screen.Photos, Screen.Albums, Screen.Settings)
@@ -283,7 +270,7 @@ fun BottomNavigationBar(
             }
             NavigationBarItem(
                 icon = { Icon(screen.icon, contentDescription = null) },
-                label = { Text(screen.label) },
+                label = if (showLabel) { { Text(screen.label) } } else null,
                 selected = isSelected,
                 onClick = {
                     if (isSelected) {

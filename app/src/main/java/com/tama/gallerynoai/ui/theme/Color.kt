@@ -10,6 +10,33 @@ val Purple40 = Color(0xFF6650a4)
 val PurpleGrey40 = Color(0xFF625b71)
 val Pink40 = Color(0xFF7D5260)
 
+// Ocean Blue
+val OceanBlueLightPrimary = Color(0xFF006495)
+val OceanBlueLightSecondary = Color(0xFF50606E)
+val OceanBlueLightTertiary = Color(0xFF65587B)
+
+val OceanBlueDarkPrimary = Color(0xFF8DCDFF)
+val OceanBlueDarkSecondary = Color(0xFFB8C8D9)
+val OceanBlueDarkTertiary = Color(0xFFCFC0E8)
+
+// Forest Green
+val ForestGreenLightPrimary = Color(0xFF006D3B)
+val ForestGreenLightSecondary = Color(0xFF4F6354)
+val ForestGreenLightTertiary = Color(0xFF3B6470)
+
+val ForestGreenDarkPrimary = Color(0xFF77DB98)
+val ForestGreenDarkSecondary = Color(0xFFB7CCBA)
+val ForestGreenDarkTertiary = Color(0xFFA2CEDC)
+
+// Sunset Orange
+val SunsetOrangeLightPrimary = Color(0xFF9C4300)
+val SunsetOrangeLightSecondary = Color(0xFF765848)
+val SunsetOrangeLightTertiary = Color(0xFF656031)
+
+val SunsetOrangeDarkPrimary = Color(0xFFFFB68E)
+val SunsetOrangeDarkSecondary = Color(0xFFE6BEAC)
+val SunsetOrangeDarkTertiary = Color(0xFFCFC899)
+
 // Pantone Basic Colors
 val PantoneYellow = Color(0xFFFEDD00)
 val PantoneOrange = Color(0xFFFE5000)
@@ -21,18 +48,6 @@ val PantoneBlue = Color(0xFF0085CA)
 val PantoneGreen = Color(0xFF00AB84)
 val PantoneBlack = Color(0xFF2D2926)
 val PantoneGray = Color(0xFF75787B)
-
-val AccentColors = listOf(
-    Color(0xFF6650a4), // Default Purple
-    Color(0xFFEF3340), // Red
-    Color(0xFFFE5000), // Orange
-    Color(0xFFFEDD00), // Yellow
-    Color(0xFF00AB84), // Green
-    Color(0xFF0085CA), // Blue
-    Color(0xFF440099), // Violet
-    Color(0xFFF2008B), // Magenta
-    Color(0xFF2D2926), // Black/Gray
-)
 
 val SelectableColors = listOf(
     // Material 3 Defaults
@@ -51,4 +66,3 @@ val SelectableColors = listOf(
     PantoneBlack,
     PantoneGray
 )
-

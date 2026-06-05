@@ -28,10 +28,6 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.Gallery">
 
-        <meta-data
-            android:name="com.google.mlkit.vision.DEPENDENCIES"
-            android:value="face,label,ocr" />
-
         <activity
             android:name=".MainActivity"
             android:exported="true"

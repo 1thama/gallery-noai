@@ -1,13 +1,12 @@
 package com.tama.gallerynoai.ui.screens
 
-import android.annotation.SuppressLint
 import android.app.Activity
 import android.content.Context
 import android.content.ContextWrapper
 import android.content.Intent
 import android.content.pm.ActivityInfo
 import android.provider.MediaStore
-import android.util.Log
+import android.annotation.SuppressLint
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.contract.ActivityResultContracts
@@ -18,7 +17,6 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
-import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -27,11 +25,11 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.VolumeOff
+import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -44,9 +42,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
-import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import kotlin.math.abs
@@ -64,6 +60,7 @@ import androidx.media3.ui.PlayerView
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.tama.gallerynoai.data.model.MediaItem
+import com.tama.gallerynoai.data.settings.FullscreenRotationMode
 import com.tama.gallerynoai.ui.components.AddTagDialog
 import com.tama.gallerynoai.ui.components.bouncyClick
 import com.tama.gallerynoai.ui.components.ZoomableBox
@@ -76,6 +73,7 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import kotlin.OptIn
+import kotlin.time.Duration.Companion.milliseconds
 
 fun Context.findActivity(): Activity? = when (this) {
     is Activity -> this
@@ -83,8 +81,7 @@ fun Context.findActivity(): Activity? = when (this) {
     else -> null
 }
 
-@SuppressLint("SourceLockedOrientationActivity")
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
+@OptIn(ExperimentalMaterial3Api::class)
 @AndroidOptIn(UnstableApi::class)
 @Composable
 fun MediaDetailScreen(
@@ -96,23 +93,26 @@ fun MediaDetailScreen(
     onBackClick: () -> Unit,
 ) {
     val context = LocalContext.current
-    
+
     val useDefaultEditor by viewModel.useDefaultEditor.collectAsState()
+    val autoPlayVideo by viewModel.autoPlayVideo.collectAsState()
+    val defaultMuteVideo by viewModel.defaultMuteVideo.collectAsState()
     val defaultEditorPackage by viewModel.defaultEditorPackage.collectAsState()
     val useDefaultVideoEditor by viewModel.useDefaultVideoEditor.collectAsState()
     val defaultVideoEditorPackage by viewModel.defaultVideoEditorPackage.collectAsState()
+    val fullscreenRotationMode by viewModel.fullscreenRotationMode.collectAsState()
 
     val initialIndex = remember(items, initialId) {
         val index = items.indexOfFirst { it.id == initialId }
         if (index != -1) index else 0
     }
-    
+
     if (items.isEmpty()) {
         Box(modifier = Modifier.fillMaxSize().background(Color.Black), contentAlignment = Alignment.Center) {
             CircularProgressIndicator(color = Color.White)
         }
         LaunchedEffect(Unit) {
-            delay(500)
+            delay(500.milliseconds)
             if (items.isEmpty()) {
                 onBackClick()
             }
@@ -123,9 +123,9 @@ fun MediaDetailScreen(
     val safeInitialPage = remember(initialIndex, items.size) {
         initialIndex.coerceIn(0, (items.size - 1).coerceAtLeast(0))
     }
-    
-    val pagerState = rememberPagerState(initialPage = safeInitialPage) { 
-        items.size 
+
+    val pagerState = rememberPagerState(initialPage = safeInitialPage) {
+        items.size
     }
     var isUiVisible by remember { mutableStateOf(value = true) }
 
@@ -138,10 +138,10 @@ fun MediaDetailScreen(
     var isManualFullScreen by remember { mutableStateOf(false) }
     var isZoomed by remember { mutableStateOf(false) }
     val interactionSource = remember { MutableInteractionSource() }
-    
+
     val currentItem by remember(items, pagerState.currentPage) {
-        derivedStateOf { 
-            if (pagerState.currentPage < items.size) items[pagerState.currentPage] else null 
+        derivedStateOf {
+            if (pagerState.currentPage < items.size) items[pagerState.currentPage] else null
         }
     }
 
@@ -159,7 +159,7 @@ fun MediaDetailScreen(
     val scope = rememberCoroutineScope()
 
     val currentItemVal = currentItem
-    
+
     var showInfoSheet by remember { mutableStateOf(false) }
     var showMoreMenu by remember { mutableStateOf(false) }
     var showAddTagDialog by remember { mutableStateOf(false) }
@@ -178,24 +178,42 @@ fun MediaDetailScreen(
         }
     }
 
-    LaunchedEffect(isManualFullScreen, currentItem, currentVideoSize) {
-        val activity = context.findActivity() ?: return@LaunchedEffect
-        if (isManualFullScreen && currentItem?.isVideo == true && currentVideoSize != null) {
-            if (currentVideoSize!!.width > currentVideoSize!!.height) {
-                activity.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
-            } else {
-                activity.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+    @SuppressLint("SourceLockedOrientationActivity")
+    fun updateOrientation(activity: Activity, mode: FullscreenRotationMode, item: MediaItem?, videoSize: IntSize?) {
+        when (mode) {
+            FullscreenRotationMode.SYSTEM_SETTING -> {
+                activity.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
             }
-        } else {
-            activity.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+            FullscreenRotationMode.DEVICE_ROTATION -> {
+                activity.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR
+            }
+            FullscreenRotationMode.ASPECT_RATIO -> {
+                if (item != null) {
+                    val width = if (item.isVideo) videoSize?.width ?: item.width else item.width
+                    val height = if (item.isVideo) videoSize?.height ?: item.height else item.height
+
+                    if (width != null && height != null && width > height) {
+                        activity.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
+                    } else {
+                        activity.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+                    }
+                } else {
+                    activity.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+                }
+            }
         }
+    }
+
+    LaunchedEffect(fullscreenRotationMode, currentItem, currentVideoSize) {
+        val activity = context.findActivity() ?: return@LaunchedEffect
+        updateOrientation(activity, fullscreenRotationMode, currentItem, currentVideoSize)
     }
 
     DisposableEffect(Unit) {
         onDispose {
             val activity = context.findActivity()
             activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
-            
+
             val window = activity?.window ?: return@onDispose
             val controller = WindowCompat.getInsetsController(window, window.decorView)
             controller.show(WindowInsetsCompat.Type.systemBars())
@@ -340,6 +358,8 @@ fun MediaDetailScreen(
                         isVisible = isPageVisible,
                         isUiVisible = isUiVisible,
                         isManualFullScreen = isManualFullScreen,
+                        autoPlay = autoPlayVideo,
+                        startMuted = defaultMuteVideo,
                         bottomPadding = if (isUiVisible && !isManualFullScreen) 80.dp else 0.dp,
                         onFullScreenToggle = {
                             isManualFullScreen = !isManualFullScreen
@@ -373,7 +393,9 @@ fun MediaDetailScreen(
                                 Text(
                                     currentItemVal.name,
                                     color = Color.White,
-                                    style = MaterialTheme.typography.titleMedium
+                                    style = MaterialTheme.typography.titleMedium,
+                                    maxLines = 1,
+                                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
                                 )
                             },
                             navigationIcon = {
@@ -476,9 +498,9 @@ fun MediaDetailScreen(
                         customTags = currentItemVal.customTags - tag
                     )
                 },
-                onDismiss = { 
+                onDismiss = {
                     focusManager.clearFocus()
-                    showInfoSheet = false 
+                    showInfoSheet = false
                 }
             )
         }
@@ -522,7 +544,7 @@ fun MediaInfoBottomSheet(
         }
 
         var detailedMetadata by remember { mutableStateOf<DetailedMetadata?>(null) }
-        
+
         LaunchedEffect(item) {
             detailedMetadata = MediaFileUtils.getDetailedMetadata(context, item.uri, item.isVideo)
         }
@@ -535,10 +557,10 @@ fun MediaInfoBottomSheet(
         ) {
             Text("Details", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
             Spacer(modifier = Modifier.height(16.dp))
-            
+
             InfoRow(label = "Name", value = item.name)
             InfoRow(label = "Date", value = SimpleDateFormat("dd MMM yyyy, HH:mm", locale).format(Date(item.dateModified * 1000)))
-            
+
             item.relativePath?.let {
                 InfoRow(label = "Path", value = it)
             }
@@ -546,16 +568,16 @@ fun MediaInfoBottomSheet(
             if (item.width != null && item.height != null) {
                 InfoRow(label = "Resolution", value = "${item.width} x ${item.height}")
             }
-            
+
             if (item.isVideo && item.duration != null) {
                 InfoRow(label = "Duration", value = formatTime(item.duration))
             }
 
             InfoRow(label = "Size", value = String.format(locale, "%.2f MB", item.size / (1024.0 * 1024.0)))
-            
+
             detailedMetadata?.let { metadata ->
                 metadata.cameraModel?.let { InfoRow(label = "Camera Model", value = it) }
-                
+
                 if (metadata.aperture != null || metadata.iso != null || metadata.shutterSpeed != null || metadata.focalLength != null) {
                     val exposureInfo = listOfNotNull(
                         metadata.aperture,
@@ -568,7 +590,7 @@ fun MediaInfoBottomSheet(
 
                 if (metadata.latitude != null && metadata.longitude != null) {
                     InfoRow(
-                        label = "Location", 
+                        label = "Location",
                         value = String.format(locale, "%.5f, %.5f", metadata.latitude, metadata.longitude)
                     )
                 }
@@ -576,12 +598,12 @@ fun MediaInfoBottomSheet(
 
             InfoRow(label = "Mime Type", value = item.mimeType)
             InfoRow(label = "URI", value = item.uri.toString())
-            
+
             Spacer(modifier = Modifier.height(24.dp))
-            
+
             Text("Tags (Click to search, X to remove)", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
             Spacer(modifier = Modifier.height(8.dp))
-            
+
             FlowRow(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -592,25 +614,25 @@ fun MediaInfoBottomSheet(
                         selected = true,
                         onClick = { onTagClick(tag) },
                         label = { Text(tag) },
-                        trailingIcon = { 
+                        trailingIcon = {
                             Icon(
-                                Icons.Default.Close, 
-                                contentDescription = "Remove", 
+                                Icons.Default.Close,
+                                contentDescription = "Remove",
                                 modifier = Modifier
                                     .size(16.dp)
                                     .clickable { onRemoveTag(tag) }
-                            ) 
+                            )
                         }
                     )
                 }
-                
+
                 AssistChip(
                     onClick = onAddTag,
                     label = { Text("Add Tag") },
                     leadingIcon = { Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp)) }
                 )
             }
-            
+
             Spacer(modifier = Modifier.height(32.dp))
         }
     }
@@ -631,6 +653,8 @@ fun MediaPage(
     isVisible: Boolean,
     isUiVisible: Boolean,
     isManualFullScreen: Boolean,
+    autoPlay: Boolean = true,
+    startMuted: Boolean = false,
     bottomPadding: androidx.compose.ui.unit.Dp = 0.dp,
     onFullScreenToggle: () -> Unit,
     onZoomChange: (Boolean) -> Unit,
@@ -650,6 +674,8 @@ fun MediaPage(
                 isVisible = isVisible,
                 isUiVisible = isUiVisible,
                 isManualFullScreen = isManualFullScreen,
+                autoPlay = autoPlay,
+                startMuted = startMuted,
                 bottomPadding = bottomPadding,
                 onFullScreenToggle = onFullScreenToggle,
                 onVideoSizeDetermined = onVideoSizeDetermined,
@@ -684,6 +710,8 @@ fun VideoPage(
     isVisible: Boolean,
     isUiVisible: Boolean,
     isManualFullScreen: Boolean,
+    autoPlay: Boolean = true,
+    startMuted: Boolean = false,
     bottomPadding: androidx.compose.ui.unit.Dp = 0.dp,
     onFullScreenToggle: () -> Unit,
     onVideoSizeDetermined: (IntSize) -> Unit,
@@ -692,50 +720,50 @@ fun VideoPage(
     val context = LocalContext.current
     var exoPlayer by remember { mutableStateOf<ExoPlayer?>(null) }
 
-    LaunchedEffect(isVisible) {
-        if (isVisible && exoPlayer == null) {
-            try {
-                exoPlayer = ExoPlayer.Builder(context).build().apply {
-                    setMediaItem(Media3Item.fromUri(item.uri))
-                    addListener(object : Player.Listener {
-                        override fun onVideoSizeChanged(videoSize: androidx.media3.common.VideoSize) {
-                            if (videoSize.width > 0 && videoSize.height > 0) {
-                                onVideoSizeDetermined(IntSize(videoSize.width, videoSize.height))
-                            }
-                        }
-                    })
-                    prepare()
-                    playWhenReady = true
+    // 1. Manage ExoPlayer lifecycle
+    DisposableEffect(item.uri) {
+        val player = ExoPlayer.Builder(context).build().apply {
+            setMediaItem(Media3Item.fromUri(item.uri))
+            addListener(object : Player.Listener {
+                override fun onVideoSizeChanged(videoSize: androidx.media3.common.VideoSize) {
+                    if (videoSize.width > 0 && videoSize.height > 0) {
+                        onVideoSizeDetermined(IntSize(videoSize.width, videoSize.height))
+                    }
                 }
-            } catch (e: Exception) {
-                Log.e("MediaDetail", "Error initializing ExoPlayer", e)
-            }
-        } else if (!isVisible) {
-            exoPlayer?.pause()
-            exoPlayer?.release()
+            })
+            prepare()
+            playWhenReady = autoPlay
+            volume = if (startMuted) 0f else 1f
+        }
+        exoPlayer = player
+
+        onDispose {
+            player.release()
             exoPlayer = null
         }
     }
 
-    DisposableEffect(Unit) {
-        onDispose {
-            exoPlayer?.release()
-            exoPlayer = null
+    // 2. Manage visibility changes (pause/play)
+    LaunchedEffect(isVisible) {
+        if (!isVisible) {
+            exoPlayer?.pause()
+        } else if (autoPlay) {
+            exoPlayer?.play()
         }
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
         if (exoPlayer != null) {
             AndroidView(
-                factory = {
-                    PlayerView(it).apply {
-                        player = exoPlayer
+                factory = { ctx ->
+                    PlayerView(ctx).apply {
+                        this.player = exoPlayer
                         useController = false
                     }
                 },
                 modifier = Modifier.fillMaxSize(),
-                update = {
-                    it.player = exoPlayer
+                update = { view ->
+                    view.player = exoPlayer
                 }
             )
 
@@ -784,6 +812,7 @@ fun VideoPlayerControls(
     var isPlaying by remember { mutableStateOf(player.isPlaying) }
     var isDragging by remember { mutableStateOf(false) }
     var dragPos by remember { mutableLongStateOf(0L) }
+    var isMuted by remember { mutableStateOf(player.volume == 0f) }
     var playbackSpeed by remember { mutableFloatStateOf(player.playbackParameters.speed) }
     var repeatMode by remember { mutableIntStateOf(player.repeatMode) }
 
@@ -794,9 +823,10 @@ fun VideoPlayerControls(
                 duration = player.duration.coerceAtLeast(0)
             }
             isPlaying = player.isPlaying
+            isMuted = player.volume == 0f
             playbackSpeed = player.playbackParameters.speed
             repeatMode = player.repeatMode
-            delay(500)
+            delay(500.milliseconds)
         }
     }
 
@@ -863,7 +893,7 @@ fun VideoPlayerControls(
                         IconButton(onClick = { showSettingsMenu = true }) {
                             Icon(Icons.Default.Settings, contentDescription = "Settings", tint = Color.White)
                         }
-                        
+
                         DropdownMenu(
                             expanded = showSettingsMenu,
                             onDismissRequest = { showSettingsMenu = false }
@@ -874,7 +904,7 @@ fun VideoPlayerControls(
                                 style = MaterialTheme.typography.labelLarge,
                                 color = MaterialTheme.colorScheme.primary
                             )
-                            
+
                             val speeds = listOf(0.5f, 1.0f, 1.5f, 2.0f)
                             speeds.forEach { speed ->
                                 DropdownMenuItem(
@@ -891,12 +921,12 @@ fun VideoPlayerControls(
                                     }
                                 )
                             }
-                            
+
                             HorizontalDivider()
-                            
+
                             DropdownMenuItem(
-                                text = { 
-                                    Text(if (repeatMode == Player.REPEAT_MODE_ONE) "Repeat: On" else "Repeat: Off") 
+                                text = {
+                                    Text(if (repeatMode == Player.REPEAT_MODE_ONE) "Repeat: On" else "Repeat: Off")
                                 },
                                 onClick = {
                                     val newMode = if (repeatMode == Player.REPEAT_MODE_ONE) {
@@ -916,6 +946,17 @@ fun VideoPlayerControls(
                                 }
                             )
                         }
+                    }
+                    IconButton(onClick = {
+                        val newMuted = !isMuted
+                        player.volume = if (newMuted) 0f else 1f
+                        isMuted = newMuted
+                    }) {
+                        Icon(
+                            imageVector = if (isMuted) Icons.AutoMirrored.Filled.VolumeOff else Icons.AutoMirrored.Filled.VolumeUp,
+                            contentDescription = if (isMuted) "Unmute" else "Mute",
+                            tint = Color.White
+                        )
                     }
                     IconButton(onClick = onFullScreenToggle) {
                         Icon(

@@ -4,7 +4,6 @@ import android.content.Context
 import android.media.MediaMetadataRetriever
 import android.net.Uri
 import androidx.exifinterface.media.ExifInterface
-import java.util.Locale
 
 data class DetailedMetadata(
     val cameraModel: String? = null,
@@ -35,7 +34,7 @@ object MediaFileUtils {
                 DetailedMetadata(
                     cameraModel = exif.getAttribute(ExifInterface.TAG_MODEL),
                     aperture = exif.getAttribute(ExifInterface.TAG_F_NUMBER)?.let { "f/$it" },
-                    iso = exif.getAttribute(ExifInterface.TAG_ISO_SPEED_RATINGS),
+                    iso = exif.getAttribute(ExifInterface.TAG_PHOTOGRAPHIC_SENSITIVITY),
                     shutterSpeed = formatShutterSpeed(exif.getAttribute(ExifInterface.TAG_EXPOSURE_TIME)),
                     focalLength = exif.getAttribute(ExifInterface.TAG_FOCAL_LENGTH)?.let { "${it}mm" },
                     latitude = latLong?.get(0),

@@ -117,5 +117,3 @@ fun getTypography(fontFamily: FontFamily): Typography {
         )
     )
 }
-
-val Typography = getTypography(FontFamily.Default)

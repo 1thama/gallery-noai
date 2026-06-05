@@ -33,7 +33,7 @@ class MediaSearchProvider {
             val terms = normalizedQuery.split(Regex("\\s+")).filter { it.isNotBlank() }
             
             filtered = filtered.mapNotNull { item ->
-                val score = calculateScore(item, normalizedQuery, terms)
+                val score = calculateScore(item, terms)
                 if (score > 0) item to score else null
             }.sortedByDescending { it.second }.map { it.first }
         } else {
@@ -54,12 +54,12 @@ class MediaSearchProvider {
         MediaType.IMAGES -> !item.isVideo
         MediaType.VIDEOS -> item.isVideo
         MediaType.GIFS -> item.mimeType == "image/gif"
-        MediaType.RAWS -> item.mimeType.startsWith("image/x-") || item.mimeType == "image/vnd.adobe.photoshop"
+        MediaType.RAW -> item.mimeType.startsWith("image/x-") || item.mimeType == "image/vnd.adobe.photoshop"
         MediaType.SVGS -> item.mimeType == "image/svg+xml"
         MediaType.PORTRAITS -> false // AI based detecting portraits is removed, maybe we can use some metadata later if available
     }
 
-    private fun calculateScore(item: MediaItem, fullQuery: String, terms: List<String>): Int {
+    private fun calculateScore(item: MediaItem, terms: List<String>): Int {
         var score = 0
         for (term in terms) {
             var termScore = 0
@@ -72,6 +72,7 @@ class MediaSearchProvider {
         return score
     }
 
+    @Suppress("unused")
     fun groupResults(items: List<MediaItem>, groupBy: GroupBy): Map<String, List<MediaItem>> {
         val df = SimpleDateFormat("MMM d, yyyy", Locale.getDefault())
         return when (groupBy) {

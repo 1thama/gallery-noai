@@ -11,7 +11,6 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.*
-import androidx.compose.ui.unit.IntSize
 import kotlin.math.abs
 
 @Composable
@@ -49,7 +48,6 @@ fun ZoomableBox(
             .clip(RectangleShape)
     ) {
         val currentConstraints = constraints
-        val containerSize = IntSize(constraints.maxWidth, constraints.maxHeight)
 
         Box(
             modifier = Modifier
@@ -86,7 +84,6 @@ fun ZoomableBox(
                                 }
 
                                 if (pastTouchSlop) {
-                                    val oldScale = scale
                                     val newScale = (scale * zoomChange).coerceIn(1f, maxScale)
                                     scale = newScale
 
@@ -106,9 +103,8 @@ fun ZoomableBox(
                                     val atRightEdge = offset.x <= -maxX && panChange.x < 0
                                     
                                     val shouldConsumeHorizontal = scale > 1.01f && !atLeftEdge && !atRightEdge
-                                    val shouldConsumeVertical = scale > 1.01f // Usually we consume vertical if zoomed
 
-                                    if (shouldConsumeHorizontal || shouldConsumeVertical || zoomChange != 1f) {
+                                    if (shouldConsumeHorizontal || zoomChange != 1f) {
                                         event.changes.forEach { 
                                             if (it.positionChanged()) {
                                                 // Consume only if we are taking the gesture

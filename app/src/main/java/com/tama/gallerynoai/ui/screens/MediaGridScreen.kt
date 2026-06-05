@@ -3,51 +3,32 @@ package com.tama.gallerynoai.ui.screens
 import android.content.Intent
 import android.content.IntentSender
 import androidx.activity.compose.BackHandler
-import androidx.compose.animation.*
-import androidx.compose.animation.core.animateDpAsState
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.*
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
-import androidx.compose.ui.zIndex
 import com.tama.gallerynoai.data.model.MediaItem
 import com.tama.gallerynoai.data.model.SortType
 import com.tama.gallerynoai.ui.components.CreateFolderDialog
 import com.tama.gallerynoai.ui.components.FastDateScroller
 import com.tama.gallerynoai.ui.components.FolderSelectionDialog
 import com.tama.gallerynoai.ui.viewmodel.GalleryItem
-import androidx.compose.foundation.gestures.awaitEachGesture
-import androidx.compose.foundation.gestures.awaitFirstDown
-import androidx.compose.foundation.gestures.awaitVerticalTouchSlopOrCancellation
-import androidx.compose.foundation.gestures.drag
-import androidx.compose.ui.input.pointer.positionChange
 import com.tama.gallerynoai.ui.components.DateHeader
 import com.tama.gallerynoai.ui.components.DragSelectionState
 import com.tama.gallerynoai.ui.components.MediaGridItem
@@ -55,14 +36,8 @@ import com.tama.gallerynoai.ui.components.SelectionTopAppBar
 import com.tama.gallerynoai.ui.components.AddTagDialog
 import com.tama.gallerynoai.ui.viewmodel.GalleryViewModel
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import java.time.Instant
-import java.time.ZoneId
-import java.time.format.DateTimeFormatter
-import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -73,7 +48,8 @@ fun MediaGridScreen(
     onMediaClick: (MediaItem) -> Unit,
     onBackClick: () -> Unit,
     onSearchClick: (() -> Unit)? = null,
-    onDeleteRequest: (IntentSender) -> Unit = {}
+    onDeleteRequest: (IntentSender) -> Unit = {},
+    gridColumns: Int = 3
 ) {
     val sortType by viewModel.sortType.collectAsState()
     val selectedIds by viewModel.selectedIds.collectAsState()
@@ -84,7 +60,7 @@ fun MediaGridScreen(
 
     val context = LocalContext.current
 
-    // 🔥 PERBAIKAN: Memindahkan komputasi berat ke Background Thread agar UI tidak freeze 🔥
+    // Move heavy computation to Background Thread to avoid UI freeze
     var groupedItems by remember { mutableStateOf<List<GalleryItem>>(emptyList()) }
 
     LaunchedEffect(filteredMedia, sortType, dateFormat) {
@@ -272,7 +248,7 @@ fun MediaGridScreen(
 
                 LazyVerticalGrid(
                     state = gridState,
-                    columns = GridCells.Fixed(3),
+                    columns = GridCells.Fixed(gridColumns),
                     modifier = Modifier
                         .fillMaxSize()
                         .pointerInput(isSelectionMode) {
@@ -326,8 +302,7 @@ fun MediaGridScreen(
                     items(
                         count = groupedItems.size,
                         key = { index ->
-                            val item = groupedItems[index]
-                            when (item) {
+                            when (val item = groupedItems[index]) {
                                 is GalleryItem.Header -> "header_${item.date}"
                                 is GalleryItem.Media -> "media_${item.item.id}"
                             }
@@ -347,8 +322,7 @@ fun MediaGridScreen(
                             }
                         }
                     ) { index ->
-                        val item = groupedItems[index]
-                        when (item) {
+                        when (val item = groupedItems[index]) {
                             is GalleryItem.Header -> DateHeader(date = item.date)
                             is GalleryItem.Media -> {
                                 val isSelected = remember(selectedIds) { selectedIds.contains(item.item.id) }
@@ -415,8 +389,13 @@ fun MediaGridScreen(
             onDismiss = { showCreateFolder = false },
             onConfirm = { folderName ->
                 showCreateFolder = false
-                // Logic to create folder and move/copy
-                // This would usually call viewModel.createNewAlbumAndMove(name, uris)
+                showFolderSelection = false
+                val selectedUris = filteredMedia.filter { selectedIds.contains(it.id) }.map { it.uri }
+                if (isMoveOperation) {
+                    viewModel.moveMedia(selectedUris, "Pictures/$folderName")?.let { onDeleteRequest(it) }
+                } else {
+                    viewModel.copyMedia(selectedUris, "Pictures/$folderName")
+                }
             }
         )
     }

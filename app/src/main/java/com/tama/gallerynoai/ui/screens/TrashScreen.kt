@@ -7,13 +7,13 @@ import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.grid.itemsIndexed
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DeleteForever
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Restore
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -47,6 +47,8 @@ fun TrashScreen(
     val isSelectionMode by viewModel.selectionMode.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
     val hasLoadedOnce by viewModel.hasLoadedOnce.collectAsState()
+    val gridColumns by viewModel.gridColumns.collectAsState()
+    val trashWarningEnabled by viewModel.trashWarningEnabled.collectAsState()
     
     var selectedItemForDialog by remember { mutableStateOf<MediaItem?>(null) }
     var showDeleteConfirmation by remember { mutableStateOf(false) }
@@ -147,147 +149,181 @@ fun TrashScreen(
             }
         }
     ) { paddingValues ->
-        if (isLoading) {
-            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator()
-            }
-        } else if (trashedItems.isEmpty() && hasLoadedOnce) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(paddingValues)
-                    .padding(32.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text(
-                        "Trash is empty",
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.Bold
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(paddingValues)
+        ) {
+            if (trashWarningEnabled && trashedItems.isNotEmpty()) {
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.tertiaryContainer
                     )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        "Items in the trash will be permanently deleted after 30 days.",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        textAlign = TextAlign.Center
-                    )
-                }
-            }
-        } else if (trashedItems.isNotEmpty()) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(paddingValues)
-            ) {
-                var dragSelectionState by remember { mutableStateOf<DragSelectionState?>(null) }
-
-                // Handle Drag Selection Logic
-                fun updateDragSelection(currentOffset: Offset) {
-                    val startState = dragSelectionState ?: return
-                    
-                    val itemUnderPointer = gridState.layoutInfo.visibleItemsInfo.firstOrNull { item ->
-                        val itemTop = item.offset.y.toFloat()
-                        val itemBottom = itemTop + item.size.height
-                        val itemLeft = item.offset.x.toFloat()
-                        val itemRight = itemLeft + item.size.width
-                        
-                        currentOffset.y >= itemTop && currentOffset.y <= itemBottom &&
-                        currentOffset.x >= itemLeft && currentOffset.x <= itemRight
-                    }
-
-                    if (itemUnderPointer != null) {
-                        val currentIndex = itemUnderPointer.index
-                        val startIndex = startState.startIndex
-                        
-                        val minIndex = minOf(startIndex, currentIndex)
-                        val maxIndex = maxOf(startIndex, currentIndex)
-                        
-                        val newSelectedIds = startState.initialSelectedIds.toMutableSet()
-                        
-                        for (i in minIndex..maxIndex) {
-                            trashedItems.getOrNull(i)?.let { item ->
-                                if (startState.shouldSelect) {
-                                    newSelectedIds.add(item.id)
-                                } else {
-                                    newSelectedIds.remove(item.id)
-                                }
-                            }
-                        }
-                        
-                        if (newSelectedIds != selectedIds) {
-                            viewModel.setSelectedIds(newSelectedIds)
-                        }
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .padding(16.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Info,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onTertiaryContainer
+                        )
+                        Spacer(modifier = Modifier.width(16.dp))
+                        Text(
+                            text = "Items in trash will be automatically deleted after 30 days by the system.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onTertiaryContainer
+                        )
                     }
                 }
+            }
 
-                LazyVerticalGrid(
-                    state = gridState,
-                    columns = GridCells.Fixed(3),
+            if (isLoading) {
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    CircularProgressIndicator()
+                }
+            } else if (trashedItems.isEmpty() && hasLoadedOnce) {
+                Box(
                     modifier = Modifier
                         .fillMaxSize()
-                        .pointerInput(isSelectionMode, trashedItems) {
-                            if (!isSelectionMode) return@pointerInput
-                            
-                            detectDragGestures(
-                                onDragStart = { offset ->
-                                    val itemUnderPointer = gridState.layoutInfo.visibleItemsInfo.firstOrNull { item ->
-                                        offset.y >= item.offset.y && offset.y <= (item.offset.y + item.size.height) &&
-                                        offset.x >= item.offset.x && offset.x <= (item.offset.x + item.size.width)
-                                    }
-                                    
-                                    if (itemUnderPointer != null) {
-                                        trashedItems.getOrNull(itemUnderPointer.index)?.let { item ->
-                                            val isCurrentlySelected = selectedIds.contains(item.id)
-                                            dragSelectionState = DragSelectionState(
-                                                startIndex = itemUnderPointer.index,
-                                                initialSelectedIds = selectedIds,
-                                                shouldSelect = !isCurrentlySelected
-                                            )
-                                            viewModel.toggleSelection(item.id)
-                                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                        }
-                                    }
-                                },
-                                onDrag = { change, _ ->
-                                    change.consume()
-                                    updateDragSelection(change.position)
-                                    
-                                    val viewHeight = gridState.layoutInfo.viewportSize.height
-                                    val threshold = 100f
-                                    if (change.position.y < threshold) {
-                                        coroutineScope.launch { gridState.scrollBy(-30f) }
-                                    } else if (change.position.y > viewHeight - threshold) {
-                                        coroutineScope.launch { gridState.scrollBy(30f) }
-                                    }
-                                },
-                                onDragEnd = { dragSelectionState = null },
-                                onDragCancel = { dragSelectionState = null }
-                            )
-                        },
-                    contentPadding = PaddingValues(1.dp),
-                    horizontalArrangement = Arrangement.spacedBy(1.dp),
-                    verticalArrangement = Arrangement.spacedBy(1.dp)
+                        .padding(32.dp),
+                    contentAlignment = Alignment.Center
                 ) {
-                    itemsIndexed(trashedItems) { index, item ->
-                        val isSelected = selectedIds.contains(item.id)
-                        MediaGridItem(
-                            item = item, 
-                            isSelected = isSelected,
-                            isSelectionMode = isSelectionMode,
-                            onClick = { 
-                                if (isSelectionMode) {
-                                    viewModel.toggleSelection(item.id)
-                                } else {
-                                    selectedItemForDialog = item 
-                                }
-                            },
-                            onLongClick = {
-                                if (!isSelectionMode) {
-                                    viewModel.toggleSelection(item.id)
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(
+                            "Trash is empty",
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            "Items in the trash will be permanently deleted after 30 days.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            textAlign = TextAlign.Center
+                        )
+                    }
+                }
+            } else if (trashedItems.isNotEmpty()) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                ) {
+                    var dragSelectionState by remember { mutableStateOf<DragSelectionState?>(null) }
+                    val currentTrashedItems by rememberUpdatedState(trashedItems)
+
+                    // Handle Drag Selection Logic
+                    fun updateDragSelection(currentOffset: Offset) {
+                        val startState = dragSelectionState ?: return
+                        
+                        val itemUnderPointer = gridState.layoutInfo.visibleItemsInfo.firstOrNull { item ->
+                            val itemTop = item.offset.y.toFloat()
+                            val itemBottom = itemTop + item.size.height
+                            val itemLeft = item.offset.x.toFloat()
+                            val itemRight = itemLeft + item.size.width
+                            
+                            currentOffset.y in itemTop..itemBottom &&
+                            currentOffset.x in itemLeft..itemRight
+                        }
+
+                        if (itemUnderPointer != null) {
+                            val currentIndex = itemUnderPointer.index
+                            val startIndex = startState.startIndex
+                            
+                            val minIndex = minOf(startIndex, currentIndex)
+                            val maxIndex = maxOf(startIndex, currentIndex)
+                            
+                            val newSelectedIds = startState.initialSelectedIds.toMutableSet()
+                            
+                            for (i in minIndex..maxIndex) {
+                                currentTrashedItems.getOrNull(i)?.let { item ->
+                                    if (startState.shouldSelect) {
+                                        newSelectedIds.add(item.id)
+                                    } else {
+                                        newSelectedIds.remove(item.id)
+                                    }
                                 }
                             }
-                        )
+                            
+                            if (newSelectedIds != selectedIds) {
+                                viewModel.setSelectedIds(newSelectedIds)
+                            }
+                        }
+                    }
+
+                    LazyVerticalGrid(
+                        state = gridState,
+                        columns = GridCells.Fixed(gridColumns),
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .pointerInput(isSelectionMode) {
+                                if (!isSelectionMode) return@pointerInput
+                                
+                                detectDragGestures(
+                                    onDragStart = { offset ->
+                                        val itemUnderPointer = gridState.layoutInfo.visibleItemsInfo.firstOrNull { item ->
+                                            offset.y in item.offset.y.toFloat()..(item.offset.y + item.size.height).toFloat() &&
+                                            offset.x in item.offset.x.toFloat()..(item.offset.x + item.size.width).toFloat()
+                                        }
+                                        
+                                        if (itemUnderPointer != null) {
+                                            currentTrashedItems.getOrNull(itemUnderPointer.index)?.let { item ->
+                                                val isCurrentlySelected = selectedIds.contains(item.id)
+                                                dragSelectionState = DragSelectionState(
+                                                    startIndex = itemUnderPointer.index,
+                                                    initialSelectedIds = selectedIds,
+                                                    shouldSelect = !isCurrentlySelected
+                                                )
+                                                viewModel.toggleSelection(item.id)
+                                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                            }
+                                        }
+                                    },
+                                    onDrag = { change, _ ->
+                                        change.consume()
+                                        updateDragSelection(change.position)
+                                        
+                                        val viewHeight = gridState.layoutInfo.viewportSize.height
+                                        val threshold = 100f
+                                        if (change.position.y < threshold) {
+                                            coroutineScope.launch { gridState.scrollBy(-30f) }
+                                        } else if (change.position.y > viewHeight - threshold) {
+                                            coroutineScope.launch { gridState.scrollBy(30f) }
+                                        }
+                                    },
+                                    onDragEnd = { dragSelectionState = null },
+                                    onDragCancel = { dragSelectionState = null }
+                                )
+                            },
+                        contentPadding = PaddingValues(1.dp),
+                        horizontalArrangement = Arrangement.spacedBy(1.dp),
+                        verticalArrangement = Arrangement.spacedBy(1.dp)
+                    ) {
+                        itemsIndexed(trashedItems) { index, item ->
+                            val isSelected = selectedIds.contains(item.id)
+                            MediaGridItem(
+                                item = item, 
+                                isSelected = isSelected,
+                                isSelectionMode = isSelectionMode,
+                                onClick = { 
+                                    if (isSelectionMode) {
+                                        viewModel.toggleSelection(item.id)
+                                    } else {
+                                        selectedItemForDialog = item 
+                                    }
+                                },
+                                onLongClick = {
+                                    if (!isSelectionMode) {
+                                        viewModel.toggleSelection(item.id)
+                                    }
+                                }
+                            )
+                        }
                     }
                 }
             }

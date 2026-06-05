@@ -1,7 +1,7 @@
 package com.tama.gallerynoai.data.model
 
 enum class MediaType {
-    IMAGES, VIDEOS, GIFS, RAWS, SVGS, PORTRAITS
+    IMAGES, VIDEOS, GIFS, RAW, SVGS, PORTRAITS
 }
 
 enum class SearchSortOrder {

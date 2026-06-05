@@ -5,6 +5,8 @@ import androidx.compose.runtime.*
 import com.tama.gallerynoai.data.model.MediaItem
 import com.tama.gallerynoai.data.model.SortType
 import com.tama.gallerynoai.ui.viewmodel.GalleryViewModel
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 enum class QuickAccessType {
     FAVORITES, VIDEOS, SCREENSHOTS
@@ -20,21 +22,27 @@ fun QuickAccessDetailScreen(
 ) {
     val mediaItems by viewModel.mediaItems.collectAsState()
     val sortType by viewModel.sortType.collectAsState()
+    val gridColumns by viewModel.gridColumns.collectAsState()
     
-    val filteredMedia = remember(mediaItems, type, sortType) {
-        val filtered = when (type) {
-            QuickAccessType.FAVORITES -> mediaItems.filter { it.isFavorite }
-            QuickAccessType.VIDEOS -> mediaItems.filter { it.isVideo }
-            QuickAccessType.SCREENSHOTS -> mediaItems.filter { 
-                it.relativePath?.contains("Screenshots", ignoreCase = true) == true || 
-                it.name.contains("Screenshot", ignoreCase = true)
+    var filteredMedia by remember { mutableStateOf(emptyList<MediaItem>()) }
+
+    LaunchedEffect(mediaItems, type, sortType) {
+        withContext(Dispatchers.Default) {
+            val filtered = when (type) {
+                QuickAccessType.FAVORITES -> mediaItems.filter { it.isFavorite }
+                QuickAccessType.VIDEOS -> mediaItems.filter { it.isVideo }
+                QuickAccessType.SCREENSHOTS -> mediaItems.filter { 
+                    it.relativePath?.contains("Screenshots", ignoreCase = true) == true || 
+                    it.name.contains("Screenshot", ignoreCase = true)
+                }
             }
-        }
-        when (sortType) {
-            SortType.DATE_NEWEST -> filtered.sortedByDescending { it.dateModified }
-            SortType.DATE_OLDEST -> filtered.sortedBy { it.dateModified }
-            SortType.SIZE_LARGEST -> filtered.sortedByDescending { it.size }
-            SortType.SIZE_SMALLEST -> filtered.sortedBy { it.size }
+            val sorted = when (sortType) {
+                SortType.DATE_NEWEST -> filtered.sortedByDescending { it.dateModified }
+                SortType.DATE_OLDEST -> filtered.sortedBy { it.dateModified }
+                SortType.SIZE_LARGEST -> filtered.sortedByDescending { it.size }
+                SortType.SIZE_SMALLEST -> filtered.sortedBy { it.size }
+            }
+            filteredMedia = sorted
         }
     }
 
@@ -50,7 +58,7 @@ fun QuickAccessDetailScreen(
         viewModel = viewModel,
         onMediaClick = onMediaClick,
         onBackClick = onBackClick,
-        onDeleteRequest = onDeleteRequest
+        onDeleteRequest = onDeleteRequest,
+        gridColumns = gridColumns
     )
 }
-

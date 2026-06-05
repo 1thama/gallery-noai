@@ -1,10 +1,9 @@
 package com.tama.gallerynoai.ui.screens
 
+import android.content.IntentSender
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
@@ -35,11 +34,6 @@ import com.tama.gallerynoai.ui.components.bouncyClick
 import com.tama.gallerynoai.ui.components.bouncyCombinedClick
 import com.tama.gallerynoai.ui.viewmodel.GalleryViewModel
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material.icons.filled.Search
-import androidx.compose.runtime.setValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.FavoriteBorder
@@ -47,8 +41,6 @@ import androidx.compose.material.icons.filled.RadioButtonUnchecked
 import androidx.compose.material.icons.filled.Screenshot
 import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.tooling.preview.Preview
-import android.content.IntentSender
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -274,7 +266,7 @@ fun AlbumGridItem(
             modifier = Modifier
                 .aspectRatio(1f)
                 .clip(RoundedCornerShape(12.dp))
-                .background(Color(0xFFEEEEEE)) // Latar belakang abu-abu terang
+                .background(Color(0xFFEEEEEE)) // Light gray background
         ) {
             AsyncImage(
                 model = ImageRequest.Builder(LocalContext.current)

@@ -26,14 +26,17 @@ import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.map as flowMap
 
-class MediaRepository(val context: Context, private val database: MediaDatabase) {
+class MediaRepository(private val context: Context, database: MediaDatabase) {
 
-    private val bucketIdCol = "bucket_id"
-    private val bucketNameCol = "bucket_display_name"
+    private companion object {
+        const val BUCKET_ID_COL = "bucket_id"
+        const val BUCKET_NAME_COL = "bucket_display_name"
+    }
+
     private val mediaDao = database.mediaDao()
     private val searchHistoryDao = database.searchHistoryDao()
 
-    fun getTotalImageCount() = mediaDao.getTotalImageCount()
+    fun getTotalMediaCount() = mediaDao.getTotalMediaCount()
 
     fun getAllMediaFlow(): Flow<List<MediaItem>> {
         return mediaDao.getAllFlow().flowMap { entities ->
@@ -43,10 +46,6 @@ class MediaRepository(val context: Context, private val database: MediaDatabase)
 
     suspend fun getMediaItemById(id: Long) = withContext(Dispatchers.IO) {
         mediaDao.getById(id)?.toMediaItem()
-    }
-
-    suspend fun updateMediaMetadataBulk(items: List<MediaItem>) = withContext(Dispatchers.IO) {
-        mediaDao.updateAll(items.map { it.toEntity() })
     }
 
     fun getRecentSearches(): Flow<List<String>> = searchHistoryDao.getRecentSearches()
@@ -67,8 +66,13 @@ class MediaRepository(val context: Context, private val database: MediaDatabase)
 
     fun getMediaPaged(sortType: SortType = SortType.DATE_NEWEST): Flow<PagingData<MediaItem>> {
         return Pager(
-            config = PagingConfig(pageSize = 60, enablePlaceholders = true),
-            pagingSourceFactory = { 
+            config = PagingConfig(
+                pageSize = 100,
+                prefetchDistance = 50,
+                initialLoadSize = 250,
+                enablePlaceholders = true
+            ),
+            pagingSourceFactory = {
                 when (sortType) {
                     SortType.DATE_NEWEST -> mediaDao.getAllPagedDateNewest()
                     SortType.DATE_OLDEST -> mediaDao.getAllPagedDateOldest()
@@ -135,8 +139,9 @@ class MediaRepository(val context: Context, private val database: MediaDatabase)
         if (ids.isEmpty()) return@withContext emptyList()
         val mediaList = mutableListOf<MediaItem>()
         val queryUri = MediaStore.Files.getContentUri("external")
-        
-        ids.chunked(500).forEach { chunk ->
+
+        // Increased chunk size and optimized query for large collections
+        ids.chunked(1000).forEach { chunk ->
             val selection = "${MediaStore.MediaColumns._ID} IN (${chunk.joinToString(",")})"
             val projection = mutableListOf(
                 MediaStore.MediaColumns._ID,
@@ -146,7 +151,7 @@ class MediaRepository(val context: Context, private val database: MediaDatabase)
                 MediaStore.MediaColumns.MIME_TYPE,
                 MediaStore.MediaColumns.DURATION,
                 MediaStore.Files.FileColumns.MEDIA_TYPE,
-                bucketIdCol,
+                BUCKET_ID_COL,
                 MediaStore.MediaColumns.RELATIVE_PATH,
                 MediaStore.MediaColumns.WIDTH,
                 MediaStore.MediaColumns.HEIGHT
@@ -164,7 +169,7 @@ class MediaRepository(val context: Context, private val database: MediaDatabase)
                 val mimeIdx = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.MIME_TYPE)
                 val durIdx = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.DURATION)
                 val typeIdx = cursor.getColumnIndexOrThrow(MediaStore.Files.FileColumns.MEDIA_TYPE)
-                val bucketIdx = cursor.getColumnIndex(bucketIdCol)
+                val bucketIdx = cursor.getColumnIndex(BUCKET_ID_COL)
                 val relativePathIdx = cursor.getColumnIndex(MediaStore.MediaColumns.RELATIVE_PATH)
                 val widthIdx = cursor.getColumnIndex(MediaStore.MediaColumns.WIDTH)
                 val heightIdx = cursor.getColumnIndex(MediaStore.MediaColumns.HEIGHT)
@@ -215,10 +220,6 @@ class MediaRepository(val context: Context, private val database: MediaDatabase)
         mediaList
     }
 
-    suspend fun updateMediaMetadata(item: MediaItem) = withContext(Dispatchers.IO) {
-        mediaDao.update(item.toEntity())
-    }
-
     suspend fun updateMediaMetadata(
         id: Long,
         customTags: List<String>? = null
@@ -234,18 +235,12 @@ class MediaRepository(val context: Context, private val database: MediaDatabase)
         mediaDao.getAllCustomTags()
     }
 
-    fun searchMedia(query: String): Flow<List<MediaItem>> {
-        return mediaDao.search("*$query*").flowMap { entities ->
-            entities.map { it.toMediaItem() }
-        }
-    }
-
     suspend fun fetchAlbums(): List<AlbumItem> = withContext(Dispatchers.IO) {
         val albumsMap = mutableMapOf<String, AlbumInfo>()
 
         val projection = mutableListOf(
-            bucketIdCol,
-            bucketNameCol,
+            BUCKET_ID_COL,
+            BUCKET_NAME_COL,
             MediaStore.MediaColumns._ID,
             MediaStore.Files.FileColumns.MEDIA_TYPE,
             MediaStore.MediaColumns.DATE_MODIFIED,
@@ -281,8 +276,8 @@ class MediaRepository(val context: Context, private val database: MediaDatabase)
             }
 
             cursor?.use {
-                val bucketIdIdx = cursor.getColumnIndex(bucketIdCol)
-                val bucketNameIdx = cursor.getColumnIndex(bucketNameCol)
+                val bucketIdIdx = cursor.getColumnIndex(BUCKET_ID_COL)
+                val bucketNameIdx = cursor.getColumnIndex(BUCKET_NAME_COL)
                 val idIdx = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns._ID)
                 val typeIdx = cursor.getColumnIndexOrThrow(MediaStore.Files.FileColumns.MEDIA_TYPE)
                 val relativePathIdx = cursor.getColumnIndex(MediaStore.MediaColumns.RELATIVE_PATH)
@@ -326,8 +321,6 @@ class MediaRepository(val context: Context, private val database: MediaDatabase)
 
     private data class AlbumInfo(val name: String, val coverUri: Uri, val count: Int, val totalSize: Long, val relativePath: String?)
 
-    suspend fun fetchMedia(): List<MediaItem> = syncMediaStoreWithRoom()
-
     fun observeMediaChange(): Flow<Unit> = callbackFlow {
         val observer = object : android.database.ContentObserver(null) {
             override fun onChange(selfChange: Boolean) {
@@ -368,7 +361,7 @@ class MediaRepository(val context: Context, private val database: MediaDatabase)
     }
 
     suspend fun fetchTrashedMedia(): List<MediaItem> = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-        fetchMediaInternal(true)
+        fetchMediaInternal()
     } else {
         emptyList()
     }
@@ -380,7 +373,7 @@ class MediaRepository(val context: Context, private val database: MediaDatabase)
         return null
     }
 
-    fun moveMedia(uris: List<Uri>, targetRelativePath: String): IntentSender? {
+    fun moveMedia(uris: List<Uri>): IntentSender? {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             return MediaStore.createWriteRequest(context.contentResolver, uris).intentSender
         }
@@ -450,7 +443,7 @@ class MediaRepository(val context: Context, private val database: MediaDatabase)
     }
 
     private fun ensureStandardPath(path: String): String {
-        var formattedPath = if (path.endsWith("/")) path else "$path/"
+        val formattedPath = if (path.endsWith("/")) path else "$path/"
         val allowedDirectories = listOf("DCIM/", "Pictures/", "Movies/", "Download/")
         val startsWithAllowed = allowedDirectories.any { formattedPath.startsWith(it, ignoreCase = true) }
 
@@ -477,7 +470,7 @@ class MediaRepository(val context: Context, private val database: MediaDatabase)
         }
     }
 
-    private suspend fun fetchMediaInternal(isTrashed: Boolean): List<MediaItem> = withContext(Dispatchers.IO) {
+    private suspend fun fetchMediaInternal(): List<MediaItem> = withContext(Dispatchers.IO) {
         val mediaList = mutableListOf<MediaItem>()
 
         val projection = mutableListOf(
@@ -488,7 +481,7 @@ class MediaRepository(val context: Context, private val database: MediaDatabase)
             MediaStore.MediaColumns.MIME_TYPE,
             MediaStore.MediaColumns.DURATION,
             MediaStore.Files.FileColumns.MEDIA_TYPE,
-            bucketIdCol,
+            BUCKET_ID_COL,
             MediaStore.MediaColumns.RELATIVE_PATH,
             MediaStore.MediaColumns.WIDTH,
             MediaStore.MediaColumns.HEIGHT
@@ -513,8 +506,7 @@ class MediaRepository(val context: Context, private val database: MediaDatabase)
                 putString(ContentResolver.QUERY_ARG_SQL_SELECTION, selection)
                 putStringArray(ContentResolver.QUERY_ARG_SQL_SELECTION_ARGS, selectionArgs)
                 putString(ContentResolver.QUERY_ARG_SQL_SORT_ORDER, sortOrder)
-                val matchTrash = if (isTrashed) MediaStore.MATCH_ONLY else MediaStore.MATCH_DEFAULT
-                putInt(MediaStore.QUERY_ARG_MATCH_TRASHED, matchTrash)
+                putInt(MediaStore.QUERY_ARG_MATCH_TRASHED, MediaStore.MATCH_ONLY)
             }
         } else null
 
@@ -533,7 +525,7 @@ class MediaRepository(val context: Context, private val database: MediaDatabase)
                 val mimeIdx = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.MIME_TYPE)
                 val durIdx = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.DURATION)
                 val typeIdx = cursor.getColumnIndexOrThrow(MediaStore.Files.FileColumns.MEDIA_TYPE)
-                val bucketIdx = cursor.getColumnIndex(bucketIdCol)
+                val bucketIdx = cursor.getColumnIndex(BUCKET_ID_COL)
                 val relativePathIdx = cursor.getColumnIndex(MediaStore.MediaColumns.RELATIVE_PATH)
                 val widthIdx = cursor.getColumnIndex(MediaStore.MediaColumns.WIDTH)
                 val heightIdx = cursor.getColumnIndex(MediaStore.MediaColumns.HEIGHT)
@@ -586,4 +578,3 @@ class MediaRepository(val context: Context, private val database: MediaDatabase)
         mediaList
     }
 }
-

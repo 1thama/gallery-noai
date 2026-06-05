@@ -9,7 +9,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -30,6 +29,7 @@ import kotlinx.coroutines.delay
 import java.net.URLDecoder
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
+import kotlin.time.Duration.Companion.seconds
 
 @Composable
 fun AppNavHost(
@@ -120,7 +120,7 @@ fun AppNavHost(
                 "favorites" -> galleryViewModel.favoriteItems.collectAsStateWithLifecycle()
                 "videos" -> galleryViewModel.videoItems.collectAsStateWithLifecycle()
                 "screenshots" -> galleryViewModel.screenshotItems.collectAsStateWithLifecycle()
-                else -> remember { androidx.compose.runtime.mutableStateOf(emptyList<MediaItem>()) }
+                else -> remember { androidx.compose.runtime.mutableStateOf(emptyList()) }
             }
 
             MediaDetailScreen(
@@ -225,7 +225,7 @@ fun AppNavHost(
                 }
                 LaunchedEffect(Unit) {
                     galleryViewModel.loadMedia()
-                    delay(2000)
+                    delay(2.seconds)
                     if (items.isEmpty()) {
                         navController.popBackStack()
                     }

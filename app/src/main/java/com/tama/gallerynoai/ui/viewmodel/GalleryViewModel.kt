@@ -7,8 +7,13 @@ import androidx.lifecycle.viewModelScope
 import com.tama.gallerynoai.data.model.*
 import com.tama.gallerynoai.data.repository.MediaRepository
 import com.tama.gallerynoai.data.repository.MediaSearchProvider
+import com.tama.gallerynoai.data.settings.FullscreenRotationMode
 import com.tama.gallerynoai.data.settings.SettingsManager
+import kotlin.time.Duration.Companion.milliseconds
+import kotlin.time.Duration.Companion.seconds
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.delay
@@ -31,29 +36,63 @@ sealed class GalleryItem {
     data class Media(val item: MediaItem) : GalleryItem()
 }
 
+@OptIn(FlowPreview::class)
 class GalleryViewModel(
     private val repository: MediaRepository,
     private val settingsManager: SettingsManager
 ) : ViewModel() {
 
-    val dateFormat: StateFlow<String> = settingsManager.dateFormat
-
-    private val dateFormatter = settingsManager.dateFormat.map { format ->
-        try {
-            DateTimeFormatter.ofPattern(format, Locale.getDefault())
-                .withZone(ZoneId.systemDefault())
-        } catch (e: Exception) {
-            DateTimeFormatter.ofPattern("dd/MM/yyyy", Locale.getDefault())
-                .withZone(ZoneId.systemDefault())
-        }
-    }
-    
-    private val dateCache = ConcurrentHashMap<Long, String>()
-    private val searchProvider = MediaSearchProvider()
-
+    // Sort type moved to the top to be readable by other variables below
     private val _sortType = MutableStateFlow(SortType.DATE_NEWEST)
     val sortType: StateFlow<SortType> = _sortType.asStateFlow()
 
+    val dateFormat: StateFlow<String> = settingsManager.dateFormat
+
+    // Calculate masterGridCount in Background Thread
+    val masterGridCount: StateFlow<Int> = combine(
+        repository.getAllMediaFlow(),
+        settingsManager.dateFormat,
+        _sortType
+    ) { items, format, sort ->
+        withContext(Dispatchers.Default) {
+            if (items.isEmpty()) return@withContext 0
+            if (sort != SortType.DATE_NEWEST && sort != SortType.DATE_OLDEST) {
+                return@withContext items.size
+            }
+
+            var total = 0
+            var lastDate = ""
+            val formatter = try {
+                DateTimeFormatter.ofPattern(format, Locale.getDefault())
+                    .withZone(ZoneId.systemDefault())
+            } catch (e: Exception) {
+                DateTimeFormatter.ofPattern("dd/MM/yyyy", Locale.getDefault())
+                    .withZone(ZoneId.systemDefault())
+            }
+
+            items.forEach { media ->
+                val date = try {
+                    formatter.format(Instant.ofEpochSecond(media.dateModified))
+                } catch (e: Exception) { "" }
+
+                if (date != lastDate) {
+                    total += 1 // Count Header
+                    lastDate = date
+                }
+                total += 1 // Count Media
+            }
+            total
+        }
+    }.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5.seconds),
+        initialValue = 0
+    )
+
+    private val dateCache = ConcurrentHashMap<Long, String>()
+    private val searchProvider = MediaSearchProvider()
+
+    @OptIn(ExperimentalCoroutinesApi::class)
     val pagedMediaItems: Flow<PagingData<GalleryItem>> = combine(
         settingsManager.dateFormat,
         _sortType
@@ -67,11 +106,11 @@ class GalleryViewModel(
             DateTimeFormatter.ofPattern("dd/MM/yyyy", Locale.getDefault())
                 .withZone(ZoneId.systemDefault())
         }
-        
+
         repository.getMediaPaged(sort).map { pagingData ->
             dateCache.clear()
             val mapped = pagingData.map { GalleryItem.Media(it) as GalleryItem }
-            
+
             if (sort == SortType.DATE_NEWEST || sort == SortType.DATE_OLDEST) {
                 mapped.insertSeparators { before, after ->
                     if (after == null) return@insertSeparators null
@@ -109,6 +148,11 @@ class GalleryViewModel(
     val defaultEditorPackage: StateFlow<String?> = settingsManager.defaultEditorPackage
     val useDefaultVideoEditor: StateFlow<Boolean> = settingsManager.useDefaultVideoEditor
     val defaultVideoEditorPackage: StateFlow<String?> = settingsManager.defaultVideoEditorPackage
+    val autoPlayVideo: StateFlow<Boolean> = settingsManager.autoPlayVideo
+    val defaultMuteVideo: StateFlow<Boolean> = settingsManager.defaultMuteVideo
+    val fullscreenRotationMode: StateFlow<FullscreenRotationMode> = settingsManager.fullscreenRotationMode
+    val gridColumns: StateFlow<Int> = settingsManager.gridColumns
+    val trashWarningEnabled: StateFlow<Boolean> = settingsManager.trashWarningEnabled
 
     private val _scrollToTopTrigger = MutableSharedFlow<String>(replay = 0)
     val scrollToTopTrigger: SharedFlow<String> = _scrollToTopTrigger.asSharedFlow()
@@ -126,7 +170,6 @@ class GalleryViewModel(
     val screenshotItems: StateFlow<List<MediaItem>> = _screenshotItems.asStateFlow()
 
     private val _groupedItems = MutableStateFlow<List<GalleryItem>>(emptyList())
-    val groupedItems: StateFlow<List<GalleryItem>> = _groupedItems.asStateFlow()
 
     private val _albums = MutableStateFlow<List<AlbumItem>>(emptyList())
     val albums: StateFlow<List<AlbumItem>> = _albums.asStateFlow()
@@ -150,7 +193,6 @@ class GalleryViewModel(
     val searchResults: StateFlow<List<MediaItem>> = _searchResults.asStateFlow()
 
     private val _searchOptions = MutableStateFlow(SearchOptions())
-    val searchOptions: StateFlow<SearchOptions> = _searchOptions.asStateFlow()
 
     private val _allUniqueTags = MutableStateFlow<List<String>>(emptyList())
     val allUniqueTags: StateFlow<List<String>> = _allUniqueTags.asStateFlow()
@@ -174,10 +216,8 @@ class GalleryViewModel(
     val selectedAlbumIds: StateFlow<Set<String>> = _selectedAlbumIds.asStateFlow()
 
     private val _pendingMovePath = MutableStateFlow<String?>(null)
-    val pendingMovePath: StateFlow<String?> = _pendingMovePath.asStateFlow()
 
     private val _pendingMoveUris = MutableStateFlow<List<Uri>>(emptyList())
-    val pendingMoveUris: StateFlow<List<Uri>> = _pendingMoveUris.asStateFlow()
 
     private var loadJob: Job? = null
     private var searchJob: Job? = null
@@ -188,7 +228,7 @@ class GalleryViewModel(
             repository.observeMediaChange()
                 .collectLatest {
                     if (!isFirst) {
-                        delay(500)
+                        delay(500.milliseconds)
                     }
                     loadMedia(silent = !isFirst)
                     isFirst = false
@@ -196,7 +236,7 @@ class GalleryViewModel(
         }
 
         repository.getAllMediaFlow()
-            .debounce(500)
+            .debounce(500.milliseconds)
             .onEach { items ->
                 _mediaItems.value = items
                 _favoriteItems.value = items.filter { it.isFavorite }
@@ -214,7 +254,7 @@ class GalleryViewModel(
             .launchIn(viewModelScope)
 
         _searchQuery
-            .debounce(300)
+            .debounce(300.milliseconds)
             .onEach { query ->
                 filterMedia(query)
             }
@@ -288,19 +328,10 @@ class GalleryViewModel(
         }
     }
 
-    suspend fun getMediaItem(mediaId: Long): MediaItem? {
-        return repository.getMediaItemById(mediaId)
-    }
-
     fun triggerScrollToTop(route: String) {
         viewModelScope.launch {
             _scrollToTopTrigger.emit(route)
         }
-    }
-
-    fun updateSearchOptions(options: SearchOptions) {
-        _searchOptions.value = options
-        filterMedia(_searchQuery.value)
     }
 
     private fun filterMedia(query: String) {
@@ -310,7 +341,7 @@ class GalleryViewModel(
             val options = _searchOptions.value.copy(
                 searchAllFiles = settingsManager.searchAllFilesByDefault.value
             )
-            
+
             val results = searchProvider.processSearch(
                 items = _mediaItems.value,
                 query = query,
@@ -329,8 +360,6 @@ class GalleryViewModel(
         loadJob = viewModelScope.launch(Dispatchers.Default) {
             try {
                 if (!silent) _isLoading.value = true
-
-                val items = repository.syncMediaStoreWithRoom()
 
                 val albums = repository.fetchAlbums()
                 withContext(Dispatchers.Main) {
@@ -384,7 +413,7 @@ class GalleryViewModel(
     fun moveMedia(uris: List<Uri>, targetPath: String): IntentSender? {
         _pendingMovePath.value = targetPath
         _pendingMoveUris.value = uris
-        return repository.moveMedia(uris, targetPath)
+        return repository.moveMedia(uris)
     }
 
     fun onMoveConfirmed() {
@@ -404,7 +433,7 @@ class GalleryViewModel(
     fun copyMedia(uris: List<Uri>, targetPath: String) {
         viewModelScope.launch {
             repository.copyMedia(uris, targetPath)
-            delay(500)
+            delay(500.milliseconds)
             loadMedia()
             clearSelection()
         }
@@ -432,10 +461,6 @@ class GalleryViewModel(
 
     fun setSelectedIds(ids: Set<Long>) {
         _selectedIds.value = ids
-    }
-
-    fun selectRange(items: List<MediaItem>) {
-        _selectedIds.value = _selectedIds.value + items.map { it.id }.toSet()
     }
 
     fun clearSelection() {
@@ -484,8 +509,7 @@ class GalleryViewModel(
             DateTimeFormatter.ofPattern("dd/MM/yyyy", Locale.getDefault())
                 .withZone(ZoneId.systemDefault())
         }
-        
-        // Clear local cache for this operation to ensure format change is reflected
+
         val localDateCache = mutableMapOf<Long, String>()
 
         items.groupBy { item ->
@@ -532,7 +556,7 @@ class GalleryViewModel(
                         val list = mutableListOf<String>()
                         for (i in 0 until array.length()) list.add(array.getString(i))
                         list
-                    } catch (e: Exception) { emptyList<String>() }
+                    } catch (e: Exception) { emptyList() }
                 }
                 .filter { it.isNotBlank() }
                 .distinct()

@@ -4,7 +4,7 @@ import androidx.room.Entity
 import androidx.room.Fts4
 import androidx.room.PrimaryKey
 import com.tama.gallerynoai.data.model.MediaItem
-import android.net.Uri
+import androidx.core.net.toUri
 
 @Entity(tableName = "media_items")
 data class MediaEntity(
@@ -27,14 +27,13 @@ data class MediaEntity(
 @Entity(tableName = "media_items_fts")
 @Fts4(contentEntity = MediaEntity::class)
 data class MediaFtsEntity(
-    val name: String,
-    val customTags: List<String>
+    val name: String
 )
 
 fun MediaEntity.toMediaItem(): MediaItem {
     return MediaItem(
         id = id,
-        uri = Uri.parse(uri),
+        uri = uri.toUri(),
         name = name,
         dateModified = dateModified,
         size = size,

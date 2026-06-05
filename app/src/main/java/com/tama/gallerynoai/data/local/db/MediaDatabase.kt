@@ -6,7 +6,7 @@ import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.room.TypeConverters
 
-@Database(entities = [MediaEntity::class, MediaFtsEntity::class, SearchHistoryEntity::class], version = 10, exportSchema = false)
+@Database(entities = [MediaEntity::class, MediaFtsEntity::class, SearchHistoryEntity::class], version = 11, exportSchema = false)
 @TypeConverters(Converters::class)
 abstract class MediaDatabase : RoomDatabase() {
     abstract fun mediaDao(): MediaDao

@@ -15,7 +15,6 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -23,7 +22,6 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -34,8 +32,6 @@ import androidx.compose.ui.unit.IntSize
 import com.tama.gallerynoai.data.model.MediaItem
 import com.tama.gallerynoai.ui.components.FastDateScroller
 import com.tama.gallerynoai.ui.components.MediaGridItem
-import com.tama.gallerynoai.ui.components.bouncyClick
-import com.tama.gallerynoai.ui.theme.*
 import com.tama.gallerynoai.ui.viewmodel.GalleryItem
 import com.tama.gallerynoai.ui.viewmodel.GalleryViewModel
 import com.tama.gallerynoai.data.model.SortType
@@ -69,7 +65,7 @@ fun SearchScreen(
     }
 
     val searchAnimationSpec = tween<Float>(durationMillis = 400, easing = FastOutSlowInEasing)
-    val IntSizeAnimationSpec = tween<IntSize>(durationMillis = 400, easing = FastOutSlowInEasing)
+    val intSizeAnimationSpec = tween<IntSize>(durationMillis = 400, easing = FastOutSlowInEasing)
     val searchDpAnimationSpec = tween<Dp>(durationMillis = 400, easing = FastOutSlowInEasing)
     val searchColorAnimationSpec = tween<Color>(durationMillis = 400, easing = FastOutSlowInEasing)
 
@@ -113,8 +109,8 @@ fun SearchScreen(
             ) {
                 AnimatedVisibility(
                     visible = !isSearchBarActive,
-                    enter = fadeIn(searchAnimationSpec) + expandVertically(IntSizeAnimationSpec),
-                    exit = fadeOut(searchAnimationSpec) + shrinkVertically(IntSizeAnimationSpec)
+                    enter = fadeIn(searchAnimationSpec) + expandVertically(intSizeAnimationSpec),
+                    exit = fadeOut(searchAnimationSpec) + shrinkVertically(intSizeAnimationSpec)
                 ) {
                     TopAppBar(
                         title = {
@@ -133,24 +129,30 @@ fun SearchScreen(
                 }
 
                 SearchBar(
-                    query = searchQuery,
-                    onQueryChange = { viewModel.onSearchQueryChange(it) },
-                    onSearch = {
-                        viewModel.saveSearch(it)
-                        isSearchBarActive = false
-                        keyboardController?.hide()
-                    },
-                    active = isSearchBarActive,
-                    onActiveChange = { isSearchBarActive = it },
-                    placeholder = { Text("Search photos, videos, tags...") },
-                    leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
-                    trailingIcon = {
-                        if (searchQuery.isNotEmpty()) {
-                            IconButton(onClick = { viewModel.onSearchQueryChange("") }) {
-                                Icon(Icons.Default.Clear, contentDescription = "Clear")
+                    inputField = {
+                        SearchBarDefaults.InputField(
+                            query = searchQuery,
+                            onQueryChange = { viewModel.onSearchQueryChange(it) },
+                            onSearch = {
+                                viewModel.saveSearch(it)
+                                isSearchBarActive = false
+                                keyboardController?.hide()
+                            },
+                            expanded = isSearchBarActive,
+                            onExpandedChange = { isSearchBarActive = it },
+                            placeholder = { Text("Search photos, videos, tags...") },
+                            leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+                            trailingIcon = {
+                                if (searchQuery.isNotEmpty()) {
+                                    IconButton(onClick = { viewModel.onSearchQueryChange("") }) {
+                                        Icon(Icons.Default.Clear, contentDescription = "Clear")
+                                    }
+                                }
                             }
-                        }
+                        )
                     },
+                    expanded = isSearchBarActive,
+                    onExpandedChange = { isSearchBarActive = it },
                     colors = SearchBarDefaults.colors(
                         containerColor = searchBarContainerColor,
                     ),
@@ -366,7 +368,11 @@ fun SearchResultsGrid(
             horizontalArrangement = Arrangement.spacedBy(1.dp),
             verticalArrangement = Arrangement.spacedBy(1.dp)
         ) {
-            items(results, key = { it.id }) { item ->
+            items(
+                results,
+                key = { it.id },
+                contentType = { "media" }
+            ) { item ->
                 MediaGridItem(item = item, onClick = { onMediaClick(item) })
             }
         }

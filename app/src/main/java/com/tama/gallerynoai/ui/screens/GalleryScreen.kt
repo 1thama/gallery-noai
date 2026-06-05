@@ -3,78 +3,40 @@ package com.tama.gallerynoai.ui.screens
 import android.content.Intent
 import android.content.IntentSender
 import androidx.activity.compose.BackHandler
-import androidx.compose.animation.*
-import androidx.compose.animation.core.animateDpAsState
-import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.detectDragGestures
-import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.*
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.input.pointer.positionChange
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.ui.text.font.FontWeight
 import com.tama.gallerynoai.ui.components.CreateFolderDialog
 import com.tama.gallerynoai.ui.components.FolderSelectionDialog
-import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.unit.IntOffset
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
-import androidx.compose.ui.zIndex
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import coil.compose.AsyncImage
-import coil.request.ImageRequest
 import com.tama.gallerynoai.data.model.MediaItem
 import com.tama.gallerynoai.data.model.SortType
 import com.tama.gallerynoai.ui.components.FastDateScroller
-import com.tama.gallerynoai.ui.components.bouncyClick
-import com.tama.gallerynoai.ui.components.bouncyCombinedClick
 import com.tama.gallerynoai.ui.viewmodel.GalleryItem
-import androidx.compose.foundation.gestures.awaitEachGesture
-import androidx.compose.foundation.gestures.awaitFirstDown
-import androidx.compose.foundation.gestures.awaitVerticalTouchSlopOrCancellation
-import androidx.compose.foundation.gestures.drag
 import com.tama.gallerynoai.ui.components.DateHeader
 import com.tama.gallerynoai.ui.components.DragSelectionState
 import com.tama.gallerynoai.ui.components.MediaGridItem
 import com.tama.gallerynoai.ui.components.SelectionTopAppBar
 import com.tama.gallerynoai.ui.components.AddTagDialog
 import com.tama.gallerynoai.ui.viewmodel.GalleryViewModel
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import java.time.Instant
-import java.time.ZoneId
-import java.time.format.DateTimeFormatter
-import java.util.Locale
-import kotlin.math.roundToInt
+import androidx.compose.ui.unit.dp
 import androidx.paging.compose.collectAsLazyPagingItems
 import androidx.paging.compose.itemContentType
 import androidx.paging.compose.itemKey
@@ -95,8 +57,10 @@ fun GalleryScreen(
     val sortType by viewModel.sortType.collectAsStateWithLifecycle()
     val selectedIds by viewModel.selectedIds.collectAsStateWithLifecycle()
     val isSelectionMode by viewModel.selectionMode.collectAsStateWithLifecycle()
-    val groupedItemsState by viewModel.groupedItems.collectAsStateWithLifecycle()
     val dateFormat by viewModel.dateFormat.collectAsStateWithLifecycle()
+
+    // Get masterGridCount from ViewModel
+    val masterGridCount by viewModel.masterGridCount.collectAsStateWithLifecycle(initialValue = 0)
 
     val context = LocalContext.current
     val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior()
@@ -258,19 +222,17 @@ fun GalleryScreen(
                 var dragSelectionState by remember { mutableStateOf<DragSelectionState?>(null) }
                 val haptic = LocalHapticFeedback.current
 
-                // Handle Drag Selection Logic
                 fun updateDragSelection(currentOffset: Offset) {
                     val startState = dragSelectionState ?: return
 
-                    // Find item under current offset
                     val itemUnderPointer = gridState.layoutInfo.visibleItemsInfo.firstOrNull { item ->
                         val itemTop = item.offset.y.toFloat()
                         val itemBottom = itemTop + item.size.height
                         val itemLeft = item.offset.x.toFloat()
                         val itemRight = itemLeft + item.size.width
 
-                        currentOffset.y >= itemTop && currentOffset.y <= itemBottom &&
-                                currentOffset.x >= itemLeft && currentOffset.x <= itemRight
+                        currentOffset.y in itemTop..itemBottom &&
+                                currentOffset.x in itemLeft..itemRight
                     }
 
                     if (itemUnderPointer != null) {
@@ -284,7 +246,6 @@ fun GalleryScreen(
 
                             val newSelectedIds = startState.initialSelectedIds.toMutableSet()
 
-                            // Get all media items in the range
                             for (i in minIndex..maxIndex) {
                                 val itemInRange = pagedItems.peek(i) as? GalleryItem.Media
                                 if (itemInRange != null) {
@@ -303,21 +264,19 @@ fun GalleryScreen(
                     }
                 }
 
-                // The Grid
                 LazyVerticalGrid(
                     state = gridState,
                     columns = GridCells.Fixed(3),
                     modifier = Modifier
                         .fillMaxSize()
-                        // 🔥 PERBAIKAN DI SINI: Menghapus pagedItems.itemCount agar sentuhan tidak restart saat data bertambah
                         .pointerInput(isSelectionMode) {
                             if (!isSelectionMode) return@pointerInput
 
                             detectDragGestures(
                                 onDragStart = { offset ->
                                     val itemUnderPointer = gridState.layoutInfo.visibleItemsInfo.firstOrNull { item ->
-                                        offset.y >= item.offset.y && offset.y <= (item.offset.y + item.size.height) &&
-                                                offset.x >= item.offset.x && offset.x <= (item.offset.x + item.size.width)
+                                        offset.y in item.offset.y.toFloat()..(item.offset.y + item.size.height).toFloat() &&
+                                                offset.x in item.offset.x.toFloat()..(item.offset.x + item.size.width).toFloat()
                                     }
 
                                     if (itemUnderPointer != null) {
@@ -338,7 +297,6 @@ fun GalleryScreen(
                                     change.consume()
                                     updateDragSelection(change.position)
 
-                                    // Auto-scroll
                                     val viewHeight = gridState.layoutInfo.viewportSize.height
                                     val threshold = 100f
                                     if (change.position.y < threshold) {
@@ -368,8 +326,7 @@ fun GalleryScreen(
                             }
                         },
                         span = { index ->
-                            val item = pagedItems.peek(index)
-                            when (item) {
+                            when (pagedItems.peek(index)) {
                                 is GalleryItem.Header -> GridItemSpan(maxLineSpan)
                                 else -> GridItemSpan(1)
                             }
@@ -381,8 +338,7 @@ fun GalleryScreen(
                             }
                         }
                     ) { index ->
-                        val item = pagedItems[index]
-                        when (item) {
+                        when (val item = pagedItems[index]) {
                             is GalleryItem.Header -> {
                                 DateHeader(date = item.date)
                             }
@@ -407,23 +363,34 @@ fun GalleryScreen(
                                 )
                             }
                             null -> {
-                                Box(modifier = Modifier.aspectRatio(1f).background(MaterialTheme.colorScheme.surfaceVariant))
+                                Box(
+                                    modifier = Modifier
+                                        .aspectRatio(1f)
+                                        .background(MaterialTheme.colorScheme.surfaceVariant)
+                                )
                             }
                         }
                     }
                 }
 
-                // --- Fast Scroll Slider ---
-                if (sortType == SortType.DATE_NEWEST || sortType == SortType.DATE_OLDEST) {
+                if (pagedItems.itemCount > 0 &&
+                    (sortType == SortType.DATE_NEWEST || sortType == SortType.DATE_OLDEST)
+                ) {
+                    val rawMediaItems by viewModel.mediaItems.collectAsStateWithLifecycle()
+
                     FastDateScroller(
                         gridState = gridState,
                         items = pagedItems.itemSnapshotList.items,
-                        dateFormat = dateFormat
+                        dateFormat = dateFormat,
+                        fullMediaList = rawMediaItems,
+                        // Pass value calculated from Background Thread
+                        masterGridCount = masterGridCount
                     )
                 }
             }
         }
     }
+
     if (showFolderSelection) {
         FolderSelectionDialog(
             albums = albums,

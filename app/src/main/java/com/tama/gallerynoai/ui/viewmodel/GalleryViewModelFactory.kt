@@ -9,6 +9,7 @@ class GalleryViewModelFactory(
     private val repository: MediaRepository,
     private val settingsManager: SettingsManager
 ) : ViewModelProvider.Factory {
+    @Suppress("UNCHECKED_CAST")
     override fun <T : ViewModel> create(modelClass: Class<T>): T {
         return when {
             modelClass.isAssignableFrom(GalleryViewModel::class.java) -> {

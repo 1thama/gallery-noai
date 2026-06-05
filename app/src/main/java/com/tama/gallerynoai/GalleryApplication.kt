@@ -1,27 +1,18 @@
 package com.tama.gallerynoai
 
 import android.app.Application
-import android.os.Build
 import coil.ImageLoader
 import coil.ImageLoaderFactory
 import coil.decode.VideoFrameDecoder
 import coil.disk.DiskCache
 import coil.memory.MemoryCache
-import coil.util.DebugLogger
 
 class GalleryApplication : Application(), ImageLoaderFactory {
-    override fun onCreate() {
-        super.onCreate()
-        try {
-            val field = android.database.CursorWindow::class.java.getDeclaredField("sCursorWindowSize")
-            field.isAccessible = true
-            field.set(null, 50 * 1024 * 1024) // 50MB
-        } catch (e: Exception) {
-            e.printStackTrace()
-        }
-    }
 
     override fun newImageLoader(): ImageLoader {
+        val diskCacheMb = getSharedPreferences("gallery_settings", MODE_PRIVATE)
+            .getInt("disk_cache_mb", 512)
+
         return ImageLoader.Builder(this)
             .components {
                 add(VideoFrameDecoder.Factory())
@@ -34,7 +25,7 @@ class GalleryApplication : Application(), ImageLoaderFactory {
             .diskCache {
                 DiskCache.Builder()
                     .directory(this.cacheDir.resolve("image_cache"))
-                    .maxSizeBytes(512L * 1024 * 1024) // 512MB
+                    .maxSizeBytes(diskCacheMb.toLong() * 1024 * 1024)
                     .build()
             }
             .crossfade(100) // Shorter crossfade for snappier feel
