@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "913205750675",
+    "project_id": "com-example-gallery-a00d6",
+    "storage_bucket": "com-example-gallery-a00d6.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:913205750675:android:f7b9a34fb88fc41d5c1666",
+        "android_client_info": {
+          "package_name": "com.tama.gallerynoai"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCB-6LAZXnWmtvkhtbMFGf7VoxDeYxYHlc"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

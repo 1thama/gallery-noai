@@ -1,0 +1,10 @@
+- [x] Researching Indexing Implementation
+- [x] Creating Implementation Plan
+- [x] Implement JSON-based persistent storage for AI metadata
+    - [x] Create `MetadataManager`
+    - [x] Update `GalleryViewModelFactory` and `MainActivity`
+- [x] Update `GalleryViewModel` to use persistent storage
+    - [x] Load cached metadata in `loadMedia`
+    - [x] Update `startIndexing` to skip already indexed items
+    - [x] Batch save indexing results
+- [x] Verify the fix (Build successful)
