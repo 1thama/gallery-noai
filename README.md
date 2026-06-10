@@ -22,7 +22,7 @@ Aplikasi galeri Android yang cepat, ringan, dan berfokus pada privasi untuk meng
 
 1. *Clone* repositori ini ke komputer Anda:
 ```bash
-git clone https://github.com/1thama/Gallery-noai
+git clone https://github.com/1thama/gallery-noai
 
 ```
 
