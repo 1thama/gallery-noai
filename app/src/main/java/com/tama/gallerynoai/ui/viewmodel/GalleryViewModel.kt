@@ -43,7 +43,13 @@ class GalleryViewModel(
 ) : ViewModel() {
 
     // Sort type moved to the top to be readable by other variables below
-    private val _sortType = MutableStateFlow(SortType.DATE_NEWEST)
+    private val _sortType = MutableStateFlow(
+        try {
+            SortType.valueOf(settingsManager.defaultSort.value)
+        } catch (e: Exception) {
+            SortType.DATE_NEWEST
+        }
+    )
     val sortType: StateFlow<SortType> = _sortType.asStateFlow()
 
     val dateFormat: StateFlow<String> = settingsManager.dateFormat
@@ -170,6 +176,7 @@ class GalleryViewModel(
     val screenshotItems: StateFlow<List<MediaItem>> = _screenshotItems.asStateFlow()
 
     private val _groupedItems = MutableStateFlow<List<GalleryItem>>(emptyList())
+    val groupedItems: StateFlow<List<GalleryItem>> = _groupedItems.asStateFlow()
 
     private val _albums = MutableStateFlow<List<AlbumItem>>(emptyList())
     val albums: StateFlow<List<AlbumItem>> = _albums.asStateFlow()
@@ -238,17 +245,25 @@ class GalleryViewModel(
         repository.getAllMediaFlow()
             .debounce(500.milliseconds)
             .onEach { items ->
-                _mediaItems.value = items
-                _favoriteItems.value = items.filter { it.isFavorite }
-                _videoItems.value = items.filter { it.isVideo }
-                _screenshotItems.value = items.filter {
-                    it.relativePath?.contains("Screenshots", ignoreCase = true) == true ||
-                            it.name.contains("Screenshot", ignoreCase = true)
+                val favorites = withContext(Dispatchers.Default) { items.filter { it.isFavorite } }
+                val videos = withContext(Dispatchers.Default) { items.filter { it.isVideo } }
+                val screenshots = withContext(Dispatchers.Default) {
+                    items.filter {
+                        it.relativePath?.contains("Screenshots", ignoreCase = true) == true ||
+                                it.name.contains("Screenshot", ignoreCase = true)
+                    }
                 }
-                updateDisplayItems()
 
-                if (_searchQuery.value.isNotEmpty()) {
-                    filterMedia(_searchQuery.value)
+                withContext(Dispatchers.Main) {
+                    _mediaItems.value = items
+                    _favoriteItems.value = favorites
+                    _videoItems.value = videos
+                    _screenshotItems.value = screenshots
+                    updateDisplayItems()
+
+                    if (_searchQuery.value.isNotEmpty()) {
+                        filterMedia(_searchQuery.value)
+                    }
                 }
             }
             .launchIn(viewModelScope)
@@ -267,6 +282,17 @@ class GalleryViewModel(
         repository.getRecentSearches()
             .onEach {
                 _recentSearches.value = it
+            }
+            .launchIn(viewModelScope)
+
+        settingsManager.defaultSort
+            .onEach { sortString ->
+                try {
+                    val newSortType = SortType.valueOf(sortString)
+                    setSortType(newSortType)
+                } catch (e: Exception) {
+                    // Ignore invalid sort types
+                }
             }
             .launchIn(viewModelScope)
     }
