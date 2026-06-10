@@ -22,7 +22,7 @@ Aplikasi galeri Android yang cepat, ringan, dan berfokus pada privasi untuk meng
 
 1. *Clone* repositori ini ke komputer Anda:
 ```bash
-git clone https://github.com/1thama/Gallery-noai
+git clone https://github.com/1thama/gallery-noai
 
 ```
 
@@ -31,9 +31,4 @@ git clone https://github.com/1thama/Gallery-noai
 4. Klik tombol **Run** (`Shift + F10`) untuk membangun dan menjalankan aplikasi di perangkat atau Emulator Android.
 
 ## 👨‍💻 Pengembang
-
-Dikembangkan sepenuhnya dari nol oleh Agung Desrie Prathama.
-
-## 📄 Lisensi
-
-Proyek ini adalah karya pribadi yang dibangun dari awal dan saat ini tidak didistribusikan di bawah lisensi *open-source* khusus (Hak Cipta dilindungi).
+By Thama
